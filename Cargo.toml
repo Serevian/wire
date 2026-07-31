@@ -1,0 +1,13 @@
+[package]
+name = "wire"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ash = { git = "https://github.com/ash-rs/ash" }
+ash-window = { git = "https://github.com/ash-rs/ash" }
+winit = "0.31.0-beta.2"
+
+[lints.clippy]
+nursery = "warn"
+pedantic = "warn"
