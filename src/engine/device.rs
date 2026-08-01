@@ -6,6 +6,22 @@ use crate::engine::context::Context;
 
 const REQUIRED_DEVICE_EXTENSIONS: &[&CStr] = &[ash::khr::swapchain::NAME];
 
+pub struct Queue {
+    index: u32,
+    family_index: u32,
+    raw: vk::Queue,
+}
+
+impl Queue {
+    pub fn new(raw: vk::Queue, family_index: u32, index: u32) -> Self {
+        Self {
+            index,
+            family_index,
+            raw,
+        }
+    }
+}
+
 pub struct Device {
     physical: PhysicalDevice,
 }
@@ -78,10 +94,57 @@ impl Device {
             vulkan13 && supports_graphics && supports_extensions && supports_required_features
         });
 
-        if let Some(gpu) = physical {
-            *gpu
-        } else {
-            panic!("Couldn't find a suitable gpu")
-        }
+        physical.map_or_else(|| panic!("Couldn't find a suitable gpu"), |gpu| *gpu)
+    }
+
+    fn query_logical_device(context: &Context, physical: PhysicalDevice) -> (ash::Device, Queue) {
+        let qfp = unsafe {
+            context
+                .instance
+                .get_physical_device_queue_family_properties(physical)
+        };
+
+        let graphics_qfp_index = qfp
+            .iter()
+            .position(|family| family.queue_flags.contains(QueueFlags::GRAPHICS))
+            .expect("Couldn't find a gpu with graphics capabilities");
+
+        let device_queue_info =
+            [vk::DeviceQueueCreateInfo::default().queue_family_index(graphics_qfp_index as u32)];
+
+        let mut vulkan11_features =
+            vk::PhysicalDeviceVulkan11Features::default().shader_draw_parameters(true);
+        let mut vulkan13_features =
+            vk::PhysicalDeviceVulkan13Features::default().dynamic_rendering(true);
+        let mut extended_dynamic_state_features =
+            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT::default()
+                .extended_dynamic_state(true);
+
+        let mut features2 = vk::PhysicalDeviceFeatures2::default()
+            .push(&mut vulkan11_features)
+            .push(&mut vulkan13_features)
+            .push(&mut extended_dynamic_state_features);
+
+        let extensions: Vec<*const i8> = REQUIRED_DEVICE_EXTENSIONS
+            .iter()
+            .map(|ext| ext.as_ptr())
+            .collect();
+        let device_info = vk::DeviceCreateInfo::default()
+            .enabled_extension_names(&extensions)
+            .queue_create_infos(&device_queue_info)
+            .push(&mut features2);
+
+        let device = unsafe {
+            context
+                .instance
+                .create_device(physical, &device_info, None)
+                .expect("Error creating logical device")
+        };
+
+        let raw_queue = unsafe { device.get_device_queue(graphics_qfp_index as u32, 0) };
+
+        let queue = Queue::new(raw_queue, graphics_qfp_index as u32, 0);
+
+        (device, queue)
     }
 }
