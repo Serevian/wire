@@ -133,15 +133,17 @@ impl Device {
             qfp2
         };
 
-        let graphics_qfp_index = qfp
-            .iter()
-            .position(|family| {
-                family
-                    .queue_family_properties
-                    .queue_flags
-                    .contains(QueueFlags::GRAPHICS)
-            })
-            .expect("Couldn't find a gpu with graphics capabilities");
+        let graphics_qfp_index = u32::try_from(
+            qfp.iter()
+                .position(|family| {
+                    family
+                        .queue_family_properties
+                        .queue_flags
+                        .contains(QueueFlags::GRAPHICS)
+                })
+                .expect("Couldn't find a gpu with graphics capabilities"),
+        )
+        .unwrap();
 
         let device_queue_info = [vk::DeviceQueueCreateInfo::default()
             .queue_family_index(graphics_qfp_index as u32)
@@ -178,9 +180,9 @@ impl Device {
                 .expect("Error creating logical device")
         };
 
-        let raw_queue = unsafe { device.get_device_queue(graphics_qfp_index as u32, 0) };
+        let raw_queue = unsafe { device.get_device_queue(graphics_qfp_index, 0) };
 
-        let queue = Queue::new(raw_queue, graphics_qfp_index as u32, 0);
+        let queue = Queue::new(raw_queue, graphics_qfp_index, 0);
 
         (device, queue)
     }

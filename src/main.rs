@@ -2,8 +2,9 @@ mod engine;
 
 use winit::{
     application::ApplicationHandler,
-    event::WindowEvent,
+    event::{ElementState, KeyEvent, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+    keyboard::{KeyCode, PhysicalKey},
     raw_window_handle::HasDisplayHandle,
     window::{Window, WindowAttributes, WindowId},
 };
@@ -39,7 +40,7 @@ impl ApplicationHandler for App {
     fn window_event(
         &mut self,
         event_loop: &dyn ActiveEventLoop,
-        window_id: WindowId,
+        _window_id: WindowId,
         event: WindowEvent,
     ) {
         // Called by `EventLoop::run_app` when a new event happens on the window.
@@ -67,6 +68,17 @@ impl ApplicationHandler for App {
                 // can render here instead.
                 self.window.as_ref().unwrap().request_redraw();
             }
+            WindowEvent::KeyboardInput {
+                device_id: _,
+                event:
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(KeyCode::KeyQ),
+                        state: ElementState::Pressed,
+                        repeat: false,
+                        ..
+                    },
+                is_synthetic: _,
+            } => event_loop.exit(),
             _ => (),
         }
     }

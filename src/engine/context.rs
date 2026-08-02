@@ -130,7 +130,7 @@ impl Context {
             } else {
                 CStr::from_ptr(callback_data.p_message).to_string_lossy()
             };
-            println!("[{:?}] [{:?}]: {}", message_severity, message_type, message);
+            println!("[{message_severity:?}] [{message_type:?}]: {message}");
 
             vk::FALSE
         }
