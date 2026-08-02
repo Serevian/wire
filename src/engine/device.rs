@@ -13,7 +13,7 @@ pub struct Queue {
 }
 
 impl Queue {
-    pub fn new(raw: vk::Queue, family_index: u32, index: u32) -> Self {
+    pub const fn new(raw: vk::Queue, family_index: u32, index: u32) -> Self {
         Self {
             index,
             family_index,
@@ -23,6 +23,8 @@ impl Queue {
 }
 
 pub struct Device {
+    queue: Queue,
+    logical: ash::Device,
     physical: PhysicalDevice,
 }
 
@@ -30,7 +32,13 @@ impl Device {
     pub fn new(context: &Context) -> Self {
         let physical = Self::query_physical_device(context);
 
-        Self { physical }
+        let (logical, queue) = Self::query_logical_device(context, physical);
+
+        Self {
+            queue,
+            logical,
+            physical,
+        }
     }
 
     fn query_physical_device(context: &Context) -> PhysicalDevice {
@@ -43,21 +51,34 @@ impl Device {
 
         let physical = gpus.iter().find(|gpu| {
             let vulkan13 = unsafe {
+                let mut properties = vk::PhysicalDeviceProperties2::default();
+
                 context
                     .instance
-                    .get_physical_device_properties(**gpu)
-                    .api_version
-                    >= vk::API_VERSION_1_3
+                    .get_physical_device_properties2(**gpu, &mut properties);
+
+                properties.properties.api_version >= vk::API_VERSION_1_3
             };
 
             let qfp = unsafe {
+                let len = context
+                    .instance
+                    .get_physical_device_queue_family_properties2_len(**gpu);
+
+                let mut qfp2 = vec![vk::QueueFamilyProperties2::default(); len];
+
                 context
                     .instance
-                    .get_physical_device_queue_family_properties(**gpu)
+                    .get_physical_device_queue_family_properties2(**gpu, &mut qfp2);
+
+                qfp2
             };
-            let supports_graphics = qfp
-                .iter()
-                .any(|queue_family| queue_family.queue_flags.contains(QueueFlags::GRAPHICS));
+            let supports_graphics = qfp.iter().any(|queue_family| {
+                queue_family
+                    .queue_family_properties
+                    .queue_flags
+                    .contains(QueueFlags::GRAPHICS)
+            });
 
             let supported_extensions = unsafe {
                 context
@@ -99,18 +120,32 @@ impl Device {
 
     fn query_logical_device(context: &Context, physical: PhysicalDevice) -> (ash::Device, Queue) {
         let qfp = unsafe {
+            let len = context
+                .instance
+                .get_physical_device_queue_family_properties2_len(physical);
+
+            let mut qfp2 = vec![vk::QueueFamilyProperties2::default(); len];
+
             context
                 .instance
-                .get_physical_device_queue_family_properties(physical)
+                .get_physical_device_queue_family_properties2(physical, &mut qfp2);
+
+            qfp2
         };
 
         let graphics_qfp_index = qfp
             .iter()
-            .position(|family| family.queue_flags.contains(QueueFlags::GRAPHICS))
+            .position(|family| {
+                family
+                    .queue_family_properties
+                    .queue_flags
+                    .contains(QueueFlags::GRAPHICS)
+            })
             .expect("Couldn't find a gpu with graphics capabilities");
 
-        let device_queue_info =
-            [vk::DeviceQueueCreateInfo::default().queue_family_index(graphics_qfp_index as u32)];
+        let device_queue_info = [vk::DeviceQueueCreateInfo::default()
+            .queue_family_index(graphics_qfp_index as u32)
+            .queue_priorities(&[1f32])];
 
         let mut vulkan11_features =
             vk::PhysicalDeviceVulkan11Features::default().shader_draw_parameters(true);
@@ -129,10 +164,12 @@ impl Device {
             .iter()
             .map(|ext| ext.as_ptr())
             .collect();
-        let device_info = vk::DeviceCreateInfo::default()
-            .enabled_extension_names(&extensions)
-            .queue_create_infos(&device_queue_info)
-            .push(&mut features2);
+        let device_info = unsafe {
+            vk::DeviceCreateInfo::default()
+                .enabled_extension_names(&extensions)
+                .queue_create_infos(&device_queue_info)
+                .extend(&mut features2)
+        };
 
         let device = unsafe {
             context
