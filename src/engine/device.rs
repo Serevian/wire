@@ -2,7 +2,7 @@ use std::ffi::CStr;
 
 use ash::vk::{self, PhysicalDevice, QueueFlags, TaggedStructure};
 
-use crate::engine::context::Context;
+use crate::engine::{context::Context, surface::Surface};
 
 const REQUIRED_DEVICE_EXTENSIONS: &[&CStr] = &[ash::khr::swapchain::NAME];
 
@@ -24,15 +24,15 @@ impl Queue {
 
 pub struct Device {
     queue: Queue,
-    logical: ash::Device,
-    physical: PhysicalDevice,
+    pub logical: ash::Device,
+    pub physical: PhysicalDevice,
 }
 
 impl Device {
-    pub fn new(context: &Context) -> Self {
+    pub fn new(context: &Context, surface: &Surface) -> Self {
         let physical = Self::query_physical_device(context);
 
-        let (logical, queue) = Self::query_logical_device(context, physical);
+        let (logical, queue) = Self::query_logical_device(context, physical, surface);
 
         Self {
             queue,
@@ -118,7 +118,11 @@ impl Device {
         physical.map_or_else(|| panic!("Couldn't find a suitable gpu"), |gpu| *gpu)
     }
 
-    fn query_logical_device(context: &Context, physical: PhysicalDevice) -> (ash::Device, Queue) {
+    fn query_logical_device(
+        context: &Context,
+        physical: PhysicalDevice,
+        surface: &Surface,
+    ) -> (ash::Device, Queue) {
         let qfp = unsafe {
             let len = context
                 .instance
@@ -133,7 +137,7 @@ impl Device {
             qfp2
         };
 
-        let graphics_qfp_index = u32::try_from(
+        let queue_family_index = u32::try_from(
             qfp.iter()
                 .position(|family| {
                     family
@@ -145,9 +149,21 @@ impl Device {
         )
         .unwrap();
 
+        let supports_present = unsafe {
+            surface
+                .loader
+                .get_physical_device_surface_support(physical, queue_family_index, surface.raw)
+                .expect("Error querying surface support for the GPU")
+        };
+
+        assert!(
+            supports_present,
+            "GPU doesn't support present. What type of GPU are you using?"
+        );
+
         let device_queue_info = [vk::DeviceQueueCreateInfo::default()
-            .queue_family_index(graphics_qfp_index as u32)
-            .queue_priorities(&[1f32])];
+            .queue_family_index(queue_family_index as u32)
+            .queue_priorities(&[0.5f32])];
 
         let mut vulkan11_features =
             vk::PhysicalDeviceVulkan11Features::default().shader_draw_parameters(true);
@@ -180,9 +196,9 @@ impl Device {
                 .expect("Error creating logical device")
         };
 
-        let raw_queue = unsafe { device.get_device_queue(graphics_qfp_index, 0) };
+        let raw_queue = unsafe { device.get_device_queue(queue_family_index, 0) };
 
-        let queue = Queue::new(raw_queue, graphics_qfp_index, 0);
+        let queue = Queue::new(raw_queue, queue_family_index, 0);
 
         (device, queue)
     }

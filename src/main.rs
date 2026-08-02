@@ -5,7 +5,7 @@ use winit::{
     event::{ElementState, KeyEvent, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{KeyCode, PhysicalKey},
-    raw_window_handle::HasDisplayHandle,
+    raw_window_handle::{HasDisplayHandle, HasWindowHandle},
     window::{Window, WindowAttributes, WindowId},
 };
 
@@ -31,10 +31,22 @@ impl ApplicationHandler for App {
             .unwrap()
             .as_raw();
 
+        let window_handle = self
+            .window
+            .as_ref()
+            .unwrap()
+            .window_handle()
+            .unwrap()
+            .as_raw();
+
         let required_extensions = ash_window::enumerate_required_extensions(display_handle)
             .expect("Couldn't get required extensions");
 
-        self.engine = Some(Engine::new(required_extensions));
+        self.engine = Some(Engine::new(
+            required_extensions,
+            display_handle,
+            window_handle,
+        ));
     }
 
     fn window_event(

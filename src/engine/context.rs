@@ -11,7 +11,7 @@ const REQUIRED_INSTANCE_EXTENSIONS: &[&CStr] = &[ash::ext::debug_utils::NAME];
 const REQUIRED_INSTANCE_EXTENSIONS: &[&CStr] = &[];
 
 pub struct Context {
-    entry: Entry,
+    pub entry: Entry,
     pub instance: ash::Instance,
     debug_utils_loader: ash::ext::debug_utils::Instance,
     debug_messenger: vk::DebugUtilsMessengerEXT,
