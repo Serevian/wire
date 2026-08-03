@@ -6,9 +6,12 @@ use ash::{
 };
 
 #[cfg(debug_assertions)]
-const REQUIRED_INSTANCE_EXTENSIONS: &[&CStr] = &[ash::ext::debug_utils::NAME];
+const REQUIRED_INSTANCE_EXTENSIONS: &[&CStr] = &[
+    ash::ext::debug_utils::NAME,
+    ash::khr::get_surface_capabilities2::NAME,
+];
 #[cfg(not(debug_assertions))]
-const REQUIRED_INSTANCE_EXTENSIONS: &[&CStr] = &[];
+const REQUIRED_INSTANCE_EXTENSIONS: &[&CStr] = &[ash::khr::get_surface_capabilities2::NAME];
 
 pub struct Context {
     pub entry: Entry,
