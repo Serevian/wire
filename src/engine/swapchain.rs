@@ -1,15 +1,20 @@
+use std::sync::Arc;
+
 use ash::vk::{
-    self, ColorSpaceKHR, CompositeAlphaFlagsKHR, Extent2D, Format, ImageUsageFlags,
-    PhysicalDeviceSurfaceInfo2KHR, PresentModeKHR, SharingMode, SurfaceCapabilities2KHR,
-    SurfaceCapabilitiesKHR, SurfaceFormat2KHR, SurfaceFormatKHR, SwapchainKHR,
+    self, ColorSpaceKHR, CompositeAlphaFlagsKHR, Extent2D, Format, ImageAspectFlags,
+    ImageSubresourceRange, ImageUsageFlags, ImageViewType, PhysicalDeviceSurfaceInfo2KHR,
+    PresentModeKHR, SharingMode, SurfaceCapabilities2KHR, SurfaceCapabilitiesKHR,
+    SurfaceFormat2KHR, SurfaceFormatKHR, SwapchainKHR,
 };
 
 use crate::engine::{context::Context, device::Device, surface::Surface};
 
 pub struct Swapchain {
-    device: ash::khr::swapchain::Device,
+    device: Arc<Device>,
+    loader: ash::khr::swapchain::Device,
     raw: SwapchainKHR,
     images: Vec<vk::Image>,
+    image_views: Vec<vk::ImageView>,
     format: SurfaceFormatKHR,
     extent: Extent2D,
 }
@@ -18,7 +23,7 @@ impl Swapchain {
     pub fn new(
         context: &Context,
         surface: &Surface,
-        device: &Device,
+        device: Arc<Device>,
         width: u32,
         height: u32,
     ) -> Self {
@@ -27,16 +32,16 @@ impl Swapchain {
 
         let capabilities_loader =
             ash::khr::get_surface_capabilities2::Instance::load(&context.entry, &context.instance);
-        let capabilities2 = Self::get_capabilities(&capabilities_loader, surface, device);
+        let capabilities2 = Self::get_capabilities(&capabilities_loader, surface, &device);
         let capabilities = &capabilities2.surface_capabilities;
 
         let extent = Self::choose_extent(capabilities, width, height);
 
         let min_image_count = Self::choose_min_image_count(capabilities);
 
-        let format = Self::choose_format(&capabilities_loader, surface, device);
+        let format = Self::choose_format(&capabilities_loader, surface, &device);
 
-        let present_mode = Self::choose_present_mode(surface, device);
+        let present_mode = Self::choose_present_mode(surface, &device);
 
         let swapchain_info = vk::SwapchainCreateInfoKHR::default()
             .surface(surface.raw)
@@ -64,10 +69,14 @@ impl Swapchain {
                 .expect("Error getting swapchain images")
         };
 
+        let image_views = Self::get_image_views(&device, format.surface_format, &images);
+
         Self {
-            device: swapchain_device,
+            device,
+            loader: swapchain_device,
             raw: swapchain,
             images,
+            image_views,
             format: format.surface_format,
             extent,
         }
@@ -166,12 +175,46 @@ impl Swapchain {
             vk::PresentModeKHR::FIFO
         }
     }
+
+    fn get_image_views(
+        device: &Device,
+        format: SurfaceFormatKHR,
+        images: &[vk::Image],
+    ) -> Vec<vk::ImageView> {
+        let mut image_views = Vec::new();
+
+        let mut image_view_info = vk::ImageViewCreateInfo::default()
+            .view_type(ImageViewType::TYPE_2D)
+            .format(format.format)
+            .subresource_range(
+                ImageSubresourceRange::default()
+                    .aspect_mask(ImageAspectFlags::COLOR)
+                    .layer_count(1)
+                    .level_count(1),
+            );
+
+        for image in images {
+            image_view_info = image_view_info.image(*image);
+            let image = unsafe {
+                device
+                    .logical
+                    .create_image_view(&image_view_info, None)
+                    .expect("Error creating image view")
+            };
+            image_views.push(image);
+        }
+
+        image_views
+    }
 }
 
 impl Drop for Swapchain {
     fn drop(&mut self) {
         unsafe {
-            self.device.destroy_swapchain(self.raw, None);
+            for view in &self.image_views {
+                self.device.logical.destroy_image_view(*view, None);
+            }
+            self.loader.destroy_swapchain(self.raw, None);
         }
     }
 }

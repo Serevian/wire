@@ -37,7 +37,7 @@ impl Engine {
 
         let device = Arc::new(Device::new(&context, &surface));
 
-        let swapchain = Swapchain::new(&context, &surface, &device, width, height);
+        let swapchain = Swapchain::new(&context, &surface, device.clone(), width, height);
 
         Self {
             swapchain,
