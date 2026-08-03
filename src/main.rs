@@ -42,10 +42,16 @@ impl ApplicationHandler for App {
         let required_extensions = ash_window::enumerate_required_extensions(display_handle)
             .expect("Couldn't get required extensions");
 
+        let size = self.window.as_ref().unwrap().surface_size();
+        let width = size.width;
+        let height = size.height;
+
         self.engine = Some(Engine::new(
             required_extensions,
             display_handle,
             window_handle,
+            width,
+            height,
         ));
     }
 
