@@ -25,7 +25,7 @@ impl Swapchain {
         let format = formats
             .iter()
             .find(|format| {
-                format.format == Format::R8G8B8A8_SRGB
+                format.format == Format::B8G8R8A8_SRGB
                     && format.color_space == ColorSpaceKHR::SRGB_NONLINEAR
             })
             .expect("Error getting a suitable surface format");
