@@ -203,3 +203,11 @@ impl Device {
         (device, queue)
     }
 }
+
+impl Drop for Device {
+    fn drop(&mut self) {
+        unsafe {
+            self.logical.destroy_device(None);
+        }
+    }
+}
