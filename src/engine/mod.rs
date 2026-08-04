@@ -6,6 +6,7 @@ use crate::engine::{context::Context, device::Device, surface::Surface, swapchai
 
 mod context;
 mod device;
+mod pipeline;
 mod surface;
 mod swapchain;
 
