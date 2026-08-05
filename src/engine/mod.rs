@@ -2,7 +2,9 @@ use std::{ffi::CStr, sync::Arc};
 
 use winit::raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 
-use crate::engine::{context::Context, device::Device, surface::Surface, swapchain::Swapchain};
+use crate::engine::{
+    context::Context, device::Device, pipeline::Pipeline, surface::Surface, swapchain::Swapchain,
+};
 
 mod context;
 mod device;
@@ -13,6 +15,7 @@ mod swapchain;
 const VALIDATION_LAYERS: &[&CStr] = &[c"VK_LAYER_KHRONOS_validation"];
 
 pub struct Engine {
+    pipeline: Pipeline,
     swapchain: Swapchain,
     device: Arc<Device>,
     surface: Surface,
@@ -40,7 +43,10 @@ impl Engine {
 
         let swapchain = Swapchain::new(&context, &surface, device.clone(), width, height);
 
+        let pipeline = Pipeline::new(device.clone(), &swapchain);
+
         Self {
+            pipeline,
             swapchain,
             device,
             surface,

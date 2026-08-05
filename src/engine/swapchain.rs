@@ -15,8 +15,8 @@ pub struct Swapchain {
     raw: SwapchainKHR,
     images: Vec<vk::Image>,
     image_views: Vec<vk::ImageView>,
-    format: SurfaceFormatKHR,
-    extent: Extent2D,
+    pub format: SurfaceFormatKHR,
+    pub extent: Extent2D,
 }
 
 impl Swapchain {
