@@ -8,7 +8,7 @@ const REQUIRED_DEVICE_EXTENSIONS: &[&CStr] = &[ash::khr::swapchain::NAME];
 
 pub struct Queue {
     index: u32,
-    family_index: u32,
+    pub family_index: u32,
     raw: vk::Queue,
 }
 
@@ -23,7 +23,7 @@ impl Queue {
 }
 
 pub struct Device {
-    queue: Queue,
+    pub queue: Queue,
     pub logical: ash::Device,
     pub physical: PhysicalDevice,
 }
