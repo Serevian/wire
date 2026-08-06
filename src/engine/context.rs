@@ -26,17 +26,17 @@ impl Context {
         enable_validation: bool,
         validation_layers: &[&CStr],
     ) -> Self {
-        let entry = unsafe { Entry::load().expect("Couldn't load vulkan entry") };
-
-        let app_info = vk::ApplicationInfo::default()
+        const APP_INFO: vk::ApplicationInfo<'_> = vk::ApplicationInfo::const_default()
             .application_name(c"Wire")
             .application_version(vk::make_api_version(1, 0, 0, 0))
             .engine_name(c"No Engine")
             .engine_version(vk::make_api_version(1, 0, 0, 0))
             .api_version(vk::API_VERSION_1_4);
 
+        let entry = unsafe { Entry::load().expect("Couldn't load vulkan entry") };
+
         let mut create_info = vk::InstanceCreateInfo::default()
-            .application_info(&app_info)
+            .application_info(&APP_INFO)
             .enabled_extension_names(required_extensions);
 
         let layer_fn_ptrs: Vec<*const i8> = validation_layers
