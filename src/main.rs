@@ -73,7 +73,7 @@ impl ApplicationHandler for App {
                 // this event rather than in AboutToWait, since rendering in here allows
                 // the program to gracefully handle redraws requested by the OS.
 
-                // Draw.
+                self.engine.as_mut().unwrap().draw();
 
                 self.window.as_ref().unwrap().pre_present_notify();
 

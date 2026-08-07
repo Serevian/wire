@@ -11,10 +11,10 @@ use crate::engine::{context::Context, device::Device, surface::Surface};
 
 pub struct Swapchain {
     device: Arc<Device>,
-    loader: ash::khr::swapchain::Device,
-    raw: SwapchainKHR,
-    images: Vec<vk::Image>,
-    image_views: Vec<vk::ImageView>,
+    pub loader: ash::khr::swapchain::Device,
+    pub raw: SwapchainKHR,
+    pub images: Vec<vk::Image>,
+    pub image_views: Vec<vk::ImageView>,
     pub format: SurfaceFormatKHR,
     pub extent: Extent2D,
 }

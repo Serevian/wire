@@ -10,7 +10,7 @@ use crate::engine::{device::Device, swapchain::Swapchain};
 pub struct Pipeline {
     device: Arc<Device>,
     layout: vk::PipelineLayout,
-    raw: vk::Pipeline,
+    pub raw: vk::Pipeline,
 }
 
 impl Pipeline {
