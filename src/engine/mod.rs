@@ -4,12 +4,8 @@ use ash::vk;
 use winit::raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 
 use crate::engine::{
-    context::Context,
-    device::Device,
-    frame_data::{FrameData, FramesInFlight},
-    pipeline::Pipeline,
-    surface::Surface,
-    swapchain::Swapchain,
+    context::Context, device::Device, frame_data::FramesInFlight, pipeline::Pipeline,
+    surface::Surface, swapchain::Swapchain,
 };
 
 mod context;
@@ -18,6 +14,7 @@ mod frame_data;
 mod pipeline;
 mod surface;
 mod swapchain;
+mod vertex;
 
 const VALIDATION_LAYERS: &[&CStr] = &[c"VK_LAYER_KHRONOS_validation"];
 const FRAMES_IN_FLIGHT: usize = 2;

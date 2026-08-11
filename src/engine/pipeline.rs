@@ -5,7 +5,7 @@ use ash::vk::{
     PrimitiveTopology, SampleCountFlags, ShaderStageFlags, TaggedStructure,
 };
 
-use crate::engine::{device::Device, swapchain::Swapchain};
+use crate::engine::{device::Device, swapchain::Swapchain, vertex::Vertex};
 
 pub struct Pipeline {
     device: Arc<Device>,
@@ -35,7 +35,11 @@ impl Pipeline {
         let pipeline_dynamic_state_info =
             vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
 
-        let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default();
+        let binding_description = [Vertex::binding_description()];
+        let attribute_description = Vertex::attribute_description();
+        let vertex_input_info = vk::PipelineVertexInputStateCreateInfo::default()
+            .vertex_binding_descriptions(&binding_description)
+            .vertex_attribute_descriptions(&attribute_description);
 
         let input_assembly_info = vk::PipelineInputAssemblyStateCreateInfo::default()
             .topology(PrimitiveTopology::TRIANGLE_LIST);
