@@ -26,6 +26,7 @@ impl Swapchain {
         device: Arc<Device>,
         width: u32,
         height: u32,
+        old_swapchain: Option<SwapchainKHR>,
     ) -> Self {
         let swapchain_device =
             ash::khr::swapchain::Device::load(&context.instance, &device.logical);
@@ -43,7 +44,7 @@ impl Swapchain {
 
         let present_mode = Self::choose_present_mode(surface, &device);
 
-        let swapchain_info = vk::SwapchainCreateInfoKHR::default()
+        let mut swapchain_info = vk::SwapchainCreateInfoKHR::default()
             .surface(surface.raw)
             .min_image_count(min_image_count)
             .image_format(format.surface_format.format)
@@ -56,6 +57,10 @@ impl Swapchain {
             .composite_alpha(CompositeAlphaFlagsKHR::OPAQUE)
             .present_mode(present_mode)
             .clipped(true);
+
+        if old_swapchain.is_some() {
+            swapchain_info = swapchain_info.old_swapchain(old_swapchain.unwrap());
+        }
 
         let swapchain = unsafe {
             swapchain_device

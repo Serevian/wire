@@ -21,7 +21,7 @@ impl ApplicationHandler for App {
     fn can_create_surfaces(&mut self, event_loop: &dyn ActiveEventLoop) {
         // The event loop has launched, and we can initialize our UI state.
 
-        let attributes = WindowAttributes::default().with_resizable(false);
+        let attributes = WindowAttributes::default();
         self.window = Some(event_loop.create_window(attributes).unwrap());
         let display_handle = self
             .window
@@ -97,6 +97,15 @@ impl ApplicationHandler for App {
                     },
                 is_synthetic: _,
             } => event_loop.exit(),
+            WindowEvent::SurfaceResized(size) => {
+                let width = size.width;
+                let height = size.height;
+
+                self.engine
+                    .as_mut()
+                    .unwrap()
+                    .resize_swapchain(width, height);
+            }
             _ => (),
         }
     }

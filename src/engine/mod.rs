@@ -51,7 +51,7 @@ impl Engine {
 
         let device = Arc::new(Device::new(&context, &surface));
 
-        let swapchain = Swapchain::new(&context, &surface, device.clone(), width, height);
+        let swapchain = Swapchain::new(&context, &surface, device.clone(), width, height, None);
 
         let pipeline = Pipeline::new(device.clone(), &swapchain);
 
@@ -82,17 +82,26 @@ impl Engine {
             },
         }
 
-        let (index, suboptimal) = unsafe {
-            self.swapchain
-                .loader
-                .acquire_next_image(
-                    self.swapchain.raw,
-                    u64::MAX,
-                    self.frames.data[self.index].present_complete,
-                    vk::Fence::null(),
-                )
-                .expect("Error acquiring next image")
+        let acquire_result = unsafe {
+            self.swapchain.loader.acquire_next_image(
+                self.swapchain.raw,
+                u64::MAX,
+                self.frames.data[self.index].present_complete,
+                vk::Fence::null(),
+            )
         };
+
+        let (index, _suboptimal) = match acquire_result {
+            Ok(result) => result,
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                return;
+            }
+            Err(e) => panic!("Error acquiring next image: {e:?}"),
+        };
+
+        unsafe {
+            self.device.logical.reset_fences(&fences);
+        }
 
         let image = self.swapchain.images[index as usize];
         let image_view = self.swapchain.image_views[index as usize];
@@ -131,13 +140,40 @@ impl Engine {
             .swapchains(&swapchains)
             .image_indices(&index_binding);
 
+        // TODO: If ErrorOutOfDate or Suboptimal, then recreate swapchain and try again in next draw
         let result = unsafe {
             self.swapchain
                 .loader
                 .queue_present(self.device.queue.raw, &present_info)
         };
 
+        match result {
+            Ok(false) => {}
+            Ok(true) | Err(vk::Result::ERROR_OUT_OF_DATE_KHR) | Err(vk::Result::SUBOPTIMAL_KHR) => {
+                // TODO: Need to resize swapchain
+            }
+            Err(e) => panic!("Error presenting: {e:?}"),
+        }
+
         self.index = (self.index + 1) % FRAMES_IN_FLIGHT;
+    }
+
+    pub fn resize_swapchain(&mut self, width: u32, height: u32) {
+        unsafe {
+            self.device
+                .logical
+                .queue_wait_idle(self.device.queue.raw)
+                .expect("Error waiting idle");
+        }
+
+        self.swapchain = Swapchain::new(
+            &self.context,
+            &self.surface,
+            self.device.clone(),
+            width,
+            height,
+            Some(self.swapchain.raw),
+        );
     }
 }
 
