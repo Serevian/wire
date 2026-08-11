@@ -5,7 +5,7 @@ use ash::vk::{
     PrimitiveTopology, SampleCountFlags, ShaderStageFlags, TaggedStructure,
 };
 
-use crate::engine::{device::Device, swapchain::Swapchain, vertex::Vertex};
+use crate::engine::{buffer::Buffer, device::Device, swapchain::Swapchain, vertex::Vertex};
 
 pub struct Pipeline {
     device: Arc<Device>,

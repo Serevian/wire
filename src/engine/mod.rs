@@ -8,6 +8,7 @@ use crate::engine::{
     surface::Surface, swapchain::Swapchain,
 };
 
+mod buffer;
 mod context;
 mod device;
 mod frame_data;
