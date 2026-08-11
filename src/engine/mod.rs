@@ -4,21 +4,27 @@ use ash::vk;
 use winit::raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 
 use crate::engine::{
-    command::FrameData, context::Context, device::Device, pipeline::Pipeline, surface::Surface,
+    context::Context,
+    device::Device,
+    frame_data::{FrameData, FramesInFlight},
+    pipeline::Pipeline,
+    surface::Surface,
     swapchain::Swapchain,
 };
 
-mod command;
 mod context;
 mod device;
+mod frame_data;
 mod pipeline;
 mod surface;
 mod swapchain;
 
 const VALIDATION_LAYERS: &[&CStr] = &[c"VK_LAYER_KHRONOS_validation"];
+const FRAMES_IN_FLIGHT: usize = 2;
 
 pub struct Engine {
-    frame_data: FrameData,
+    index: usize,
+    frames: FramesInFlight,
     pipeline: Pipeline,
     swapchain: Swapchain,
     device: Arc<Device>,
@@ -49,10 +55,11 @@ impl Engine {
 
         let pipeline = Pipeline::new(device.clone(), &swapchain);
 
-        let frame_data = FrameData::new(device.clone());
+        let frames = FramesInFlight::new(device.clone(), FRAMES_IN_FLIGHT);
 
         Self {
-            frame_data,
+            index: 0,
+            frames,
             pipeline,
             swapchain,
             device,
@@ -62,7 +69,7 @@ impl Engine {
     }
 
     pub fn draw(&mut self) {
-        let fences = [self.frame_data.draw_fence];
+        let fences = [self.frames.data[self.index].draw_fence];
         let fence_result = unsafe { self.device.logical.wait_for_fences(&fences, true, u64::MAX) };
 
         match fence_result {
@@ -81,7 +88,7 @@ impl Engine {
                 .acquire_next_image(
                     self.swapchain.raw,
                     u64::MAX,
-                    self.frame_data.present_complete,
+                    self.frames.data[self.index].present_complete,
                     vk::Fence::null(),
                 )
                 .expect("Error acquiring next image")
@@ -89,13 +96,17 @@ impl Engine {
 
         let image = self.swapchain.images[index as usize];
         let image_view = self.swapchain.image_views[index as usize];
-        self.frame_data
-            .record_command(image, image_view, self.swapchain.extent, &self.pipeline);
+        self.frames.data[self.index].record_command(
+            image,
+            image_view,
+            self.swapchain.extent,
+            &self.pipeline,
+        );
 
         let wait_destination_stage_mask = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-        let present_semaphores = [self.frame_data.present_complete];
-        let command_buffers = [self.frame_data.buffer];
-        let render_semaphores = [self.frame_data.render_finished];
+        let present_semaphores = [self.frames.data[self.index].present_complete];
+        let command_buffers = [self.frames.data[self.index].buffer];
+        let render_semaphores = [self.frames.data[self.index].render_finished];
         let submit_info = [vk::SubmitInfo::default()
             .wait_semaphores(&present_semaphores)
             .wait_dst_stage_mask(&wait_destination_stage_mask)
@@ -108,7 +119,7 @@ impl Engine {
                 .queue_submit(
                     self.device.queue.raw,
                     &submit_info,
-                    self.frame_data.draw_fence,
+                    self.frames.data[self.index].draw_fence,
                 )
                 .expect("Error submiting work to the queue");
         };
@@ -125,6 +136,8 @@ impl Engine {
                 .loader
                 .queue_present(self.device.queue.raw, &present_info)
         };
+
+        self.index = (self.index + 1) % FRAMES_IN_FLIGHT;
     }
 }
 

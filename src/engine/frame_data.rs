@@ -4,17 +4,15 @@ use ash::vk::{self, ImageAspectFlags, ImageSubresourceRange};
 
 use crate::engine::{device::Device, pipeline::Pipeline};
 
-pub struct FrameData {
+pub struct FramesInFlight {
     device: Arc<Device>,
     pool: vk::CommandPool,
-    pub buffer: vk::CommandBuffer,
-    pub present_complete: vk::Semaphore,
-    pub render_finished: vk::Semaphore,
-    pub draw_fence: vk::Fence,
+    pub data: Vec<FrameData>,
+    frames: usize,
 }
 
-impl FrameData {
-    pub fn new(device: Arc<Device>) -> Self {
+impl FramesInFlight {
+    pub fn new(device: Arc<Device>, frames_in_flight: usize) -> Self {
         let pool_info = vk::CommandPoolCreateInfo::default()
             .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
             .queue_family_index(device.queue.family_index);
@@ -26,8 +24,42 @@ impl FrameData {
                 .expect("Error creating command pool")
         };
 
+        let mut data = vec![];
+
+        for _ in 0..frames_in_flight {
+            let frame = FrameData::new(device.clone(), &pool);
+            data.push(frame);
+        }
+
+        Self {
+            device,
+            pool,
+            data,
+            frames: frames_in_flight,
+        }
+    }
+}
+
+impl Drop for FramesInFlight {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.logical.destroy_command_pool(self.pool, None);
+        }
+    }
+}
+
+pub struct FrameData {
+    device: Arc<Device>,
+    pub buffer: vk::CommandBuffer,
+    pub present_complete: vk::Semaphore,
+    pub render_finished: vk::Semaphore,
+    pub draw_fence: vk::Fence,
+}
+
+impl FrameData {
+    pub fn new(device: Arc<Device>, pool: &vk::CommandPool) -> Self {
         let command_buffer_info = vk::CommandBufferAllocateInfo::default()
-            .command_pool(pool)
+            .command_pool(*pool)
             .level(vk::CommandBufferLevel::PRIMARY)
             .command_buffer_count(1);
 
@@ -64,7 +96,6 @@ impl FrameData {
 
         Self {
             device,
-            pool,
             buffer: command_buffer,
             present_complete,
             render_finished,
@@ -226,7 +257,6 @@ impl Drop for FrameData {
             self.device
                 .logical
                 .destroy_semaphore(self.present_complete, None);
-            self.device.logical.destroy_command_pool(self.pool, None);
         }
     }
 }
