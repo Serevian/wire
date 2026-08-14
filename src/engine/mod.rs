@@ -4,8 +4,8 @@ use ash::vk;
 use winit::raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 
 use crate::engine::{
-    context::Context, device::Device, frame_data::FramesInFlight, pipeline::Pipeline,
-    surface::Surface, swapchain::Swapchain,
+    buffer::Buffer, context::Context, device::Device, frame_data::FramesInFlight,
+    pipeline::Pipeline, surface::Surface, swapchain::Swapchain, vertex::Vertex,
 };
 
 mod buffer;
@@ -21,6 +21,8 @@ const VALIDATION_LAYERS: &[&CStr] = &[c"VK_LAYER_KHRONOS_validation"];
 const FRAMES_IN_FLIGHT: usize = 2;
 
 pub struct Engine {
+    vertices: Vec<Vertex>, // Don't know where to put this lol
+    buffer: Buffer,
     index: usize,
     frames: FramesInFlight,
     pipeline: Pipeline,
@@ -55,7 +57,19 @@ impl Engine {
 
         let frames = FramesInFlight::new(device.clone(), FRAMES_IN_FLIGHT);
 
+        let vertices = vec![
+            Vertex::new([0.0, -0.5], [1.0, 1.0, 1.0]),
+            Vertex::new([0.5, 0.5], [0.0, 1.0, 0.0]),
+            Vertex::new([-0.5, 0.5], [0.0, 0.0, 1.0]),
+        ];
+
+        let buffer = Buffer::new(device.clone(), vertices.len());
+
+        buffer.allocate(&vertices);
+
         Self {
+            vertices,
+            buffer,
             index: 0,
             frames,
             pipeline,
@@ -108,6 +122,8 @@ impl Engine {
             image_view,
             self.swapchain.extent,
             &self.pipeline,
+            &self.buffer,
+            &self.vertices,
         );
 
         let wait_destination_stage_mask = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];

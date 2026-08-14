@@ -3,9 +3,18 @@ use std::mem::offset_of;
 use ash::vk;
 
 #[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
     pos: ggmath::Vec2<f32>,
     color: ggmath::Vec3<f32>,
+}
+
+impl Vertex {
+    pub fn new(pos: [f32; 2], color: [f32; 3]) -> Self {
+        let pos = ggmath::Vec2::new(pos[0], pos[1]);
+        let color = ggmath::Vec3::new(color[0], color[1], color[2]);
+        Self { pos, color }
+    }
 }
 
 impl Vertex {

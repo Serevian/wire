@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ash::vk::{self, ImageAspectFlags, ImageSubresourceRange};
 
-use crate::engine::{device::Device, pipeline::Pipeline};
+use crate::engine::{buffer::Buffer, device::Device, pipeline::Pipeline, vertex::Vertex};
 
 pub struct FramesInFlight {
     device: Arc<Device>,
@@ -109,6 +109,8 @@ impl FrameData {
         image_view: vk::ImageView,
         extent: vk::Extent2D,
         pipeline: &Pipeline,
+        buffer: &Buffer,
+        vertices: &[Vertex],
     ) {
         let begin_command_info = vk::CommandBufferBeginInfo::default();
 
@@ -165,6 +167,13 @@ impl FrameData {
             );
         }
 
+        let buffers = &[buffer.raw];
+        unsafe {
+            self.device
+                .logical
+                .cmd_bind_vertex_buffers(self.buffer, 0, buffers, &[0]);
+        }
+
         let viewports = [vk::Viewport::default()
             .width(extent.width as f32)
             .height(extent.height as f32)
@@ -185,7 +194,9 @@ impl FrameData {
         }
 
         unsafe {
-            self.device.logical.cmd_draw(self.buffer, 3, 1, 0, 0);
+            self.device
+                .logical
+                .cmd_draw(self.buffer, vertices.len() as u32, 1, 0, 0);
         }
 
         unsafe {

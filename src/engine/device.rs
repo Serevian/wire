@@ -25,6 +25,8 @@ impl Queue {
 pub struct Device {
     pub queue: Queue,
     pub logical: ash::Device,
+
+    pub memory_properties: vk::PhysicalDeviceMemoryProperties,
     pub physical: PhysicalDevice,
 }
 
@@ -34,9 +36,16 @@ impl Device {
 
         let (logical, queue) = Self::query_logical_device(context, physical, surface);
 
+        let memory_properties = unsafe {
+            context
+                .instance
+                .get_physical_device_memory_properties(physical)
+        };
+
         Self {
             queue,
             logical,
+            memory_properties,
             physical,
         }
     }
