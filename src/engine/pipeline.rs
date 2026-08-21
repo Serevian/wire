@@ -5,7 +5,9 @@ use ash::vk::{
     PrimitiveTopology, SampleCountFlags, ShaderStageFlags, TaggedStructure,
 };
 
-use crate::engine::{buffer::Buffer, device::Device, swapchain::Swapchain, vertex::Vertex};
+use crate::engine::{
+    descriptor::DescriptorLayout, device::Device, swapchain::Swapchain, vertex::Vertex,
+};
 
 pub struct Pipeline {
     device: Arc<Device>,
@@ -14,7 +16,11 @@ pub struct Pipeline {
 }
 
 impl Pipeline {
-    pub fn new(device: Arc<Device>, swapchain: &Swapchain) -> Self {
+    pub fn new(
+        device: Arc<Device>,
+        swapchain: &Swapchain,
+        descriptor_layout: &DescriptorLayout,
+    ) -> Self {
         let bytes = include_bytes!(concat!(env!("OUT_DIR"), "/slang.spv"));
 
         let shader_module = Self::create_shader_module(&device, bytes);
@@ -70,7 +76,8 @@ impl Pipeline {
             .logic_op(LogicOp::COPY)
             .attachments(&color_blend_attachment);
 
-        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default();
+        let binding = [descriptor_layout.raw];
+        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default().set_layouts(&binding);
 
         let layout = unsafe {
             device

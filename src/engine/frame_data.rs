@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
 use ash::vk::{self, ImageAspectFlags, ImageSubresourceRange};
+use vk_mem::Allocator;
 
 use crate::engine::{
-    buffer::{self, Buffer},
+    buffer::{self, Buffer, Uniform},
     device::Device,
     pipeline::Pipeline,
 };
@@ -16,7 +17,11 @@ pub struct FramesInFlight {
 }
 
 impl FramesInFlight {
-    pub fn new(device: Arc<Device>, frames_in_flight: usize) -> Self {
+    pub fn new(
+        device: Arc<Device>,
+        allocator: Arc<vk_mem::Allocator>,
+        frames_in_flight: usize,
+    ) -> Self {
         let pool_info = vk::CommandPoolCreateInfo::default()
             .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
             .queue_family_index(device.queue.family_index);
@@ -31,7 +36,7 @@ impl FramesInFlight {
         let mut data = vec![];
 
         for _ in 0..frames_in_flight {
-            let frame = FrameData::new(device.clone(), pool);
+            let frame = FrameData::new(device.clone(), allocator.clone(), pool);
             data.push(frame);
         }
 
@@ -54,14 +59,20 @@ impl Drop for FramesInFlight {
 
 pub struct FrameData {
     device: Arc<Device>,
-    pub buffer: vk::CommandBuffer,
+    allocator: Arc<Allocator>,
+    uniform_buffer: Buffer<Uniform>,
+    pub cmd: vk::CommandBuffer,
     pub present_complete: vk::Semaphore,
     pub render_finished: vk::Semaphore,
     pub draw_fence: vk::Fence,
 }
 
 impl FrameData {
-    pub fn new(device: Arc<Device>, pool: vk::CommandPool) -> Self {
+    pub fn new(
+        device: Arc<Device>,
+        allocator: Arc<vk_mem::Allocator>,
+        pool: vk::CommandPool,
+    ) -> Self {
         let command_buffer_info = vk::CommandBufferAllocateInfo::default()
             .command_pool(pool)
             .level(vk::CommandBufferLevel::PRIMARY)
@@ -73,6 +84,8 @@ impl FrameData {
                 .allocate_command_buffers(&command_buffer_info)
                 .expect("Error allocating command buffers")[0]
         };
+
+        let uniform_buffer = Buffer::<Uniform>::new(device.clone(), allocator.clone(), 0); // TODO: Check which size needs to be used by the uniform buffer
 
         let present_complete = unsafe {
             device
@@ -100,7 +113,8 @@ impl FrameData {
 
         Self {
             device,
-            buffer: command_buffer,
+            allocator,
+            cmd: command_buffer,
             present_complete,
             render_finished,
             draw_fence,
@@ -122,7 +136,7 @@ impl FrameData {
         unsafe {
             self.device
                 .logical
-                .begin_command_buffer(self.buffer, &begin_command_info)
+                .begin_command_buffer(self.cmd, &begin_command_info)
                 .expect("Error beginning command buffer");
         };
 
@@ -161,19 +175,19 @@ impl FrameData {
         unsafe {
             self.device
                 .logical
-                .cmd_begin_rendering(self.buffer, &rendering_info);
+                .cmd_begin_rendering(self.cmd, &rendering_info);
         };
 
         unsafe {
             self.device.logical.cmd_bind_pipeline(
-                self.buffer,
+                self.cmd,
                 vk::PipelineBindPoint::GRAPHICS,
                 pipeline.raw,
             );
         }
 
-        vertex_buffer.bind(self.buffer, 0);
-        index_buffer.bind(self.buffer, vk::IndexType::UINT16);
+        vertex_buffer.bind(self.cmd, 0);
+        index_buffer.bind(self.cmd, vk::IndexType::UINT16);
 
         let viewports = [vk::Viewport::default()
             .width(extent.width as f32)
@@ -182,26 +196,24 @@ impl FrameData {
         unsafe {
             self.device
                 .logical
-                .cmd_set_viewport(self.buffer, 0, &viewports);
+                .cmd_set_viewport(self.cmd, 0, &viewports);
         }
 
         let scissors = [vk::Rect2D::default()
             .offset(vk::Offset2D::default())
             .extent(extent)];
         unsafe {
-            self.device
-                .logical
-                .cmd_set_scissor(self.buffer, 0, &scissors);
+            self.device.logical.cmd_set_scissor(self.cmd, 0, &scissors);
         }
 
         unsafe {
             self.device
                 .logical
-                .cmd_draw_indexed(self.buffer, indices.len() as u32, 1, 0, 0, 0);
+                .cmd_draw_indexed(self.cmd, indices.len() as u32, 1, 0, 0, 0);
         }
 
         unsafe {
-            self.device.logical.cmd_end_rendering(self.buffer);
+            self.device.logical.cmd_end_rendering(self.cmd);
         }
 
         self.transition_image_layout(
@@ -217,7 +229,7 @@ impl FrameData {
         unsafe {
             self.device
                 .logical
-                .end_command_buffer(self.buffer)
+                .end_command_buffer(self.cmd)
                 .expect("Error ending command buffer");
         };
     }
@@ -254,7 +266,7 @@ impl FrameData {
         unsafe {
             self.device
                 .logical
-                .cmd_pipeline_barrier2(self.buffer, &dependency_info);
+                .cmd_pipeline_barrier2(self.cmd, &dependency_info);
         };
     }
 }

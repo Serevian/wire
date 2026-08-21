@@ -6,6 +6,7 @@ use winit::raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use crate::engine::{
     buffer::{Buffer, Index, Staging, Vertex},
     context::Context,
+    descriptor::DescriptorLayout,
     device::Device,
     frame_data::FramesInFlight,
     pipeline::Pipeline,
@@ -15,11 +16,13 @@ use crate::engine::{
 
 mod buffer;
 mod context;
+mod descriptor;
 mod device;
 mod frame_data;
 mod pipeline;
 mod surface;
 mod swapchain;
+mod ubo;
 mod vertex;
 
 const VALIDATION_LAYERS: &[&CStr] = &[c"VK_LAYER_KHRONOS_validation"];
@@ -32,6 +35,7 @@ pub struct Engine {
     index: usize,
     frames: FramesInFlight,
     pipeline: Pipeline,
+    descriptor_layout: DescriptorLayout,
     swapchain: Swapchain,
     allocator: Arc<vk_mem::Allocator>,
     device: Arc<Device>,
@@ -93,7 +97,7 @@ impl Engine {
         let index_buffer = Buffer::<Index>::new(device.clone(), allocator.clone(), indices_size);
         index_staging_buffer.write_slice(&indices);
 
-        let staging_command_buffer = frames.data[0].buffer;
+        let staging_command_buffer = frames.data[0].cmd;
         let command_info = vk::CommandBufferBeginInfo::default()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
         unsafe {
@@ -193,7 +197,7 @@ impl Engine {
 
         let wait_destination_stage_mask = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
         let present_semaphores = [self.frames.data[self.index].present_complete];
-        let command_buffers = [self.frames.data[self.index].buffer];
+        let command_buffers = [self.frames.data[self.index].cmd];
         let render_semaphores = [self.frames.data[self.index].render_finished];
         let submit_info = [vk::SubmitInfo::default()
             .wait_semaphores(&present_semaphores)

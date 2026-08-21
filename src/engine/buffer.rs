@@ -7,6 +7,7 @@ use crate::engine::device::Device;
 
 pub struct Index;
 pub struct Staging;
+pub struct Uniform;
 pub struct Vertex;
 
 pub struct Buffer<Usage> {
@@ -146,6 +147,34 @@ impl Buffer<Index> {
             self.device
                 .logical
                 .cmd_bind_index_buffer(cmd, self.raw, 0, index_type);
+        }
+    }
+}
+
+impl Buffer<Uniform> {
+    pub fn new(device: Arc<Device>, allocator: Arc<vk_mem::Allocator>, size: u64) -> Self {
+        let buffer_info = vk::BufferCreateInfo::default()
+            .size(size)
+            .usage(vk::BufferUsageFlags::UNIFORM_BUFFER)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+        let alloc_info = vk_mem::AllocationCreateInfo {
+            usage: vk_mem::MemoryUsage::AutoPreferHost,
+            flags: vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE
+                | vk_mem::AllocationCreateFlags::MAPPED,
+            ..Default::default()
+        };
+
+        let (raw, allocation) =
+            unsafe { allocator.create_buffer(&buffer_info, &alloc_info).unwrap() };
+
+        Self {
+            device,
+            allocator,
+            raw,
+            allocation,
+            size,
+            _marker: PhantomData,
         }
     }
 }
