@@ -4,12 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-ash = { git = "https://github.com/Serevian/ash/", branch = "pr-1051" }
-ash-window = { git = "https://github.com/Serevian/ash/", branch = "pr-1051" }
+ash = { git = "https://github.com/ash-rs/ash" }
+ash-window = { git = "https://github.com/ash-rs/ash" }
 bytemuck = { version = "1.25.2", "features" = ["latest_stable_rust"] }
 ggmath = { version = "0.17.1", "features" = ["bytemuck"] }
 num = "0.4.3"
 winit = "0.31.0-beta.2"
+vk-mem = { git = "https://github.com/Serevian/vk-mem-rs" }
+
 [lints.clippy]
 nursery = "warn"
 pedantic = "warn"

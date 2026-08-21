@@ -102,12 +102,14 @@ impl Device {
             });
 
             let mut vulkan11_features = vk::PhysicalDeviceVulkan11Features::default();
+            let mut vulkan12_features = vk::PhysicalDeviceVulkan12Features::default();
             let mut vulkan13_features = vk::PhysicalDeviceVulkan13Features::default();
             let mut extended_dynamic_state_features =
                 vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT::default();
 
             let mut features2 = vk::PhysicalDeviceFeatures2::default()
                 .push(&mut vulkan11_features)
+                .push(&mut vulkan12_features)
                 .push(&mut vulkan13_features)
                 .push(&mut extended_dynamic_state_features);
 
@@ -117,6 +119,7 @@ impl Device {
                     .get_physical_device_features2(**gpu, &mut features2);
             }
 
+            // Check a few more features
             let supports_required_features = vulkan11_features.shader_draw_parameters == vk::TRUE
                 && vulkan13_features.dynamic_rendering == vk::TRUE
                 && extended_dynamic_state_features.extended_dynamic_state == vk::TRUE;
@@ -176,14 +179,22 @@ impl Device {
 
         let mut vulkan11_features =
             vk::PhysicalDeviceVulkan11Features::default().shader_draw_parameters(true);
-        let mut vulkan13_features =
-            vk::PhysicalDeviceVulkan13Features::default().dynamic_rendering(true);
+        let mut vulkan12_features = vk::PhysicalDeviceVulkan12Features::default()
+            .descriptor_indexing(true)
+            .shader_sampled_image_array_non_uniform_indexing(true)
+            .descriptor_binding_variable_descriptor_count(true)
+            .runtime_descriptor_array(true)
+            .buffer_device_address(true);
+        let mut vulkan13_features = vk::PhysicalDeviceVulkan13Features::default()
+            .dynamic_rendering(true)
+            .synchronization2(true);
         let mut extended_dynamic_state_features =
             vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT::default()
                 .extended_dynamic_state(true);
 
         let mut features2 = vk::PhysicalDeviceFeatures2::default()
             .push(&mut vulkan11_features)
+            .push(&mut vulkan12_features)
             .push(&mut vulkan13_features)
             .push(&mut extended_dynamic_state_features);
 

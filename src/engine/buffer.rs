@@ -1,102 +1,116 @@
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 
 use ash::vk;
+use vk_mem::Alloc;
 
-use crate::engine::{device::Device, vertex::Vertex};
+use crate::engine::device::Device;
 
-pub struct Buffer {
+pub struct Staging;
+pub struct Vertex;
+
+pub struct Buffer<Usage> {
     device: Arc<Device>,
+    allocator: Arc<vk_mem::Allocator>,
     pub raw: vk::Buffer,
-    memory: vk::DeviceMemory,
+    allocation: vk_mem::Allocation,
     size: u64,
+    _marker: PhantomData<Usage>,
 }
 
-impl Buffer {
-    pub fn new(device: Arc<Device>, vertex_count: usize) -> Self {
+impl<U> Drop for Buffer<U> {
+    fn drop(&mut self) {
+        unsafe {
+            self.allocator
+                .destroy_buffer(self.raw, &mut self.allocation);
+        }
+    }
+}
+
+impl Buffer<Staging> {
+    pub fn new(device: Arc<Device>, allocator: Arc<vk_mem::Allocator>, size: u64) -> Self {
         let buffer_info = vk::BufferCreateInfo::default()
-            .size((size_of::<Vertex>() * vertex_count) as u64)
-            .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
+            .size(size)
+            .usage(vk::BufferUsageFlags::TRANSFER_SRC)
             .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
-        let raw = unsafe {
-            device
-                .logical
-                .create_buffer(&buffer_info, None)
-                .expect("Error creating buffer")
+        let alloc_info = vk_mem::AllocationCreateInfo {
+            usage: vk_mem::MemoryUsage::AutoPreferHost,
+            flags: vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE
+                | vk_mem::AllocationCreateFlags::MAPPED,
+            ..Default::default()
         };
 
-        let memory_requirements = unsafe { device.logical.get_buffer_memory_requirements(raw) };
-
-        let memory_type_index = Self::find_memory_type(
-            memory_requirements.memory_type_bits,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-            &device,
-        );
-
-        let memory_allocate_info = vk::MemoryAllocateInfo::default()
-            .allocation_size(memory_requirements.size)
-            .memory_type_index(memory_type_index);
-
-        let buffer_memory = unsafe {
-            device
-                .logical
-                .allocate_memory(&memory_allocate_info, None)
-                .expect("Error allocating memory")
-        };
-
-        unsafe {
-            device
-                .logical
-                .bind_buffer_memory(raw, buffer_memory, 0)
-                .expect("Error binding buffer memory");
-        }
+        let (raw, allocation) =
+            unsafe { allocator.create_buffer(&buffer_info, &alloc_info).unwrap() };
 
         Self {
             device,
+            allocator,
             raw,
-            memory: buffer_memory,
-            size: buffer_info.size,
+            allocation,
+            size,
+            _marker: PhantomData,
         }
     }
 
-    pub fn allocate(&self, vertices: &[Vertex]) {
+    pub fn write_slice<T: bytemuck::NoUninit>(&self, data: &[T]) {
+        let bytes = bytemuck::cast_slice(data);
+        assert!(bytes.len() as u64 <= self.size, "Data exceeds buffer size");
+
+        let alloc_info = self.allocator.get_allocation_info(&self.allocation);
         unsafe {
-            let data = self
-                .device
-                .logical
-                .map_memory(self.memory, 0, self.size, vk::MemoryMapFlags::empty())
-                .expect("Error mapping memory to buffer");
-
-            let bytes: &[u8] = bytemuck::cast_slice(vertices);
-
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), data as *mut u8, bytes.len());
-
-            self.device.logical.unmap_memory(self.memory);
+            std::ptr::copy_nonoverlapping(
+                bytes.as_ptr(),
+                alloc_info.mapped_data as *mut u8,
+                bytes.len(),
+            );
         }
     }
 
-    fn find_memory_type(
-        filter: u32,
-        properties: vk::MemoryPropertyFlags,
-        device: &Arc<Device>,
-    ) -> u32 {
-        (0..device.memory_properties.memory_type_count)
-            .find(|&i| {
-                let type_supported = filter & (1 << i) != 0;
-                let properties_supported = device.memory_properties.memory_types[i as usize]
-                    .property_flags
-                    .contains(properties);
-                type_supported && properties_supported
-            })
-            .expect("Error finding right memory type")
+    pub fn copy_to<U>(&self, cmd: vk::CommandBuffer, dst: &Buffer<U>) {
+        let copy_region = vk::BufferCopy::default().size(self.size.min(dst.size));
+        unsafe {
+            self.device
+                .logical
+                .cmd_copy_buffer(cmd, self.raw, dst.raw, &[copy_region]);
+        }
     }
 }
 
-impl Drop for Buffer {
-    fn drop(&mut self) {
+impl Buffer<Vertex> {
+    /// Vertex buffers are gpu mapped, you need a staging buffer to allocate data
+    pub fn new(device: Arc<Device>, allocator: Arc<vk_mem::Allocator>, size: u64) -> Self {
+        let buffer_info = vk::BufferCreateInfo::default()
+            .size(size)
+            .usage(vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+        let alloc_info = vk_mem::AllocationCreateInfo {
+            usage: vk_mem::MemoryUsage::AutoPreferDevice,
+            ..Default::default()
+        };
+
+        let (raw, allocation) = unsafe {
+            allocator
+                .create_buffer(&buffer_info, &alloc_info)
+                .expect("Error creating vertex buffer")
+        };
+
+        Self {
+            device,
+            allocator,
+            raw,
+            allocation,
+            size,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn bind(&self, cmd: vk::CommandBuffer, binding: u32) {
         unsafe {
-            self.device.logical.free_memory(self.memory, None);
-            self.device.logical.destroy_buffer(self.raw, None);
+            self.device
+                .logical
+                .cmd_bind_vertex_buffers(cmd, binding, &[self.raw], &[0]);
         }
     }
 }

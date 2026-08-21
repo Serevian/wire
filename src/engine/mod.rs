@@ -4,8 +4,13 @@ use ash::vk;
 use winit::raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 
 use crate::engine::{
-    buffer::Buffer, context::Context, device::Device, frame_data::FramesInFlight,
-    pipeline::Pipeline, surface::Surface, swapchain::Swapchain, vertex::Vertex,
+    buffer::{Buffer, Staging, Vertex},
+    context::Context,
+    device::Device,
+    frame_data::FramesInFlight,
+    pipeline::Pipeline,
+    surface::Surface,
+    swapchain::Swapchain,
 };
 
 mod buffer;
@@ -21,12 +26,13 @@ const VALIDATION_LAYERS: &[&CStr] = &[c"VK_LAYER_KHRONOS_validation"];
 const FRAMES_IN_FLIGHT: usize = 2;
 
 pub struct Engine {
-    vertices: Vec<Vertex>, // Don't know where to put this lol
-    buffer: Buffer,
+    vertices: Vec<vertex::Vertex>, // Don't know where to put this lol
+    buffer: Buffer<Vertex>,
     index: usize,
     frames: FramesInFlight,
     pipeline: Pipeline,
     swapchain: Swapchain,
+    allocator: Arc<vk_mem::Allocator>,
     device: Arc<Device>,
     surface: Surface,
     context: Context,
@@ -51,6 +57,14 @@ impl Engine {
 
         let device = Arc::new(Device::new(&context, &surface));
 
+        let mut allocator_info =
+            vk_mem::AllocatorCreateInfo::new(&context.instance, &device.logical, device.physical);
+        allocator_info.flags = vk_mem::AllocatorCreateFlags::BUFFER_DEVICE_ADDRESS;
+
+        let allocator = unsafe {
+            Arc::new(vk_mem::Allocator::new(allocator_info).expect("Error creating allocator"))
+        };
+
         let swapchain = Swapchain::new(&context, &surface, device.clone(), width, height, None);
 
         let pipeline = Pipeline::new(device.clone(), &swapchain);
@@ -58,22 +72,60 @@ impl Engine {
         let frames = FramesInFlight::new(device.clone(), FRAMES_IN_FLIGHT);
 
         let vertices = vec![
-            Vertex::new([0.0, -0.5], [1.0, 1.0, 1.0]),
-            Vertex::new([0.5, 0.5], [0.0, 1.0, 0.0]),
-            Vertex::new([-0.5, 0.5], [0.0, 0.0, 1.0]),
+            vertex::Vertex::new([0.0, -0.5], [1.0, 1.0, 1.0]),
+            vertex::Vertex::new([0.5, 0.5], [0.0, 1.0, 0.0]),
+            vertex::Vertex::new([-0.5, 0.5], [0.0, 0.0, 1.0]),
         ];
 
-        let buffer = Buffer::new(device.clone(), vertices.len());
+        let size = std::mem::size_of_val(vertices.as_slice()) as u64;
 
-        buffer.allocate(&vertices);
+        let staging_buffer = Buffer::<Staging>::new(device.clone(), allocator.clone(), size);
+        let vertex_buffer = Buffer::<Vertex>::new(device.clone(), allocator.clone(), size);
+
+        staging_buffer.write_slice(&vertices);
+        let staging_command_buffer = frames.data[0].buffer;
+        let command_info = vk::CommandBufferBeginInfo::default()
+            .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+        unsafe {
+            device
+                .logical
+                .begin_command_buffer(staging_command_buffer, &command_info)
+                .expect("Error beginning staging commands");
+        }
+
+        staging_buffer.copy_to(staging_command_buffer, &vertex_buffer);
+
+        unsafe {
+            device
+                .logical
+                .end_command_buffer(staging_command_buffer)
+                .expect("Error ending staging commands");
+        }
+
+        unsafe {
+            device
+                .logical
+                .queue_submit(
+                    device.queue.raw,
+                    &[vk::SubmitInfo::default().command_buffers(&[staging_command_buffer])],
+                    vk::Fence::null(),
+                )
+                .expect("Error submiting staging commands");
+
+            device
+                .logical
+                .queue_wait_idle(device.queue.raw)
+                .expect("Error waiting idle");
+        }
 
         Self {
             vertices,
-            buffer,
+            buffer: vertex_buffer,
             index: 0,
             frames,
             pipeline,
             swapchain,
+            allocator,
             device,
             surface,
             context,
