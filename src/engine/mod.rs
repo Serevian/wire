@@ -4,7 +4,7 @@ use ash::vk;
 use winit::raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 
 use crate::engine::{
-    buffer::{Buffer, Staging, Vertex},
+    buffer::{Buffer, Index, Staging, Vertex},
     context::Context,
     device::Device,
     frame_data::FramesInFlight,
@@ -26,8 +26,9 @@ const VALIDATION_LAYERS: &[&CStr] = &[c"VK_LAYER_KHRONOS_validation"];
 const FRAMES_IN_FLIGHT: usize = 2;
 
 pub struct Engine {
-    vertices: Vec<vertex::Vertex>, // Don't know where to put this lol
-    buffer: Buffer<Vertex>,
+    indices: Vec<u16>,
+    index_buffer: Buffer<Index>,
+    vertex_buffer: Buffer<Vertex>,
     index: usize,
     frames: FramesInFlight,
     pipeline: Pipeline,
@@ -72,17 +73,26 @@ impl Engine {
         let frames = FramesInFlight::new(device.clone(), FRAMES_IN_FLIGHT);
 
         let vertices = vec![
-            vertex::Vertex::new([0.0, -0.5], [1.0, 1.0, 1.0]),
-            vertex::Vertex::new([0.5, 0.5], [0.0, 1.0, 0.0]),
-            vertex::Vertex::new([-0.5, 0.5], [0.0, 0.0, 1.0]),
+            vertex::Vertex::new([-0.5, -0.5], [1.0, 1.0, 1.0]),
+            vertex::Vertex::new([0.5, -0.5], [0.0, 1.0, 0.0]),
+            vertex::Vertex::new([0.5, 0.5], [0.0, 0.0, 1.0]),
+            vertex::Vertex::new([-0.5, 0.5], [1.0, 1.0, 1.0]),
         ];
+        let vertices_size = std::mem::size_of_val(vertices.as_slice()) as u64;
 
-        let size = std::mem::size_of_val(vertices.as_slice()) as u64;
+        let vertex_staging_buffer =
+            Buffer::<Staging>::new(device.clone(), allocator.clone(), vertices_size);
+        let vertex_buffer = Buffer::<Vertex>::new(device.clone(), allocator.clone(), vertices_size);
+        vertex_staging_buffer.write_slice(&vertices);
 
-        let staging_buffer = Buffer::<Staging>::new(device.clone(), allocator.clone(), size);
-        let vertex_buffer = Buffer::<Vertex>::new(device.clone(), allocator.clone(), size);
+        let indices: Vec<u16> = vec![0, 1, 2, 2, 3, 0];
+        let indices_size = std::mem::size_of_val(indices.as_slice()) as u64;
 
-        staging_buffer.write_slice(&vertices);
+        let index_staging_buffer =
+            Buffer::<Staging>::new(device.clone(), allocator.clone(), indices_size);
+        let index_buffer = Buffer::<Index>::new(device.clone(), allocator.clone(), indices_size);
+        index_staging_buffer.write_slice(&indices);
+
         let staging_command_buffer = frames.data[0].buffer;
         let command_info = vk::CommandBufferBeginInfo::default()
             .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
@@ -93,7 +103,8 @@ impl Engine {
                 .expect("Error beginning staging commands");
         }
 
-        staging_buffer.copy_to(staging_command_buffer, &vertex_buffer);
+        vertex_staging_buffer.copy_to(staging_command_buffer, &vertex_buffer);
+        index_staging_buffer.copy_to(staging_command_buffer, &index_buffer);
 
         unsafe {
             device
@@ -119,8 +130,9 @@ impl Engine {
         }
 
         Self {
-            vertices,
-            buffer: vertex_buffer,
+            indices,
+            index_buffer,
+            vertex_buffer,
             index: 0,
             frames,
             pipeline,
@@ -174,8 +186,9 @@ impl Engine {
             image_view,
             self.swapchain.extent,
             &self.pipeline,
-            &self.buffer,
-            &self.vertices,
+            &self.vertex_buffer,
+            &self.index_buffer,
+            &self.indices,
         );
 
         let wait_destination_stage_mask = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];

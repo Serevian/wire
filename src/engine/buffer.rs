@@ -5,6 +5,7 @@ use vk_mem::Alloc;
 
 use crate::engine::device::Device;
 
+pub struct Index;
 pub struct Staging;
 pub struct Vertex;
 
@@ -111,6 +112,40 @@ impl Buffer<Vertex> {
             self.device
                 .logical
                 .cmd_bind_vertex_buffers(cmd, binding, &[self.raw], &[0]);
+        }
+    }
+}
+
+impl Buffer<Index> {
+    pub fn new(device: Arc<Device>, allocator: Arc<vk_mem::Allocator>, size: u64) -> Self {
+        let buffer_info = vk::BufferCreateInfo::default()
+            .size(size)
+            .usage(vk::BufferUsageFlags::INDEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+        let alloc_info = vk_mem::AllocationCreateInfo {
+            usage: vk_mem::MemoryUsage::AutoPreferDevice,
+            ..Default::default()
+        };
+
+        let (raw, allocation) =
+            unsafe { allocator.create_buffer(&buffer_info, &alloc_info).unwrap() };
+
+        Self {
+            device,
+            allocator,
+            raw,
+            allocation,
+            size,
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn bind(&self, cmd: vk::CommandBuffer, index_type: vk::IndexType) {
+        unsafe {
+            self.device
+                .logical
+                .cmd_bind_index_buffer(cmd, self.raw, 0, index_type);
         }
     }
 }

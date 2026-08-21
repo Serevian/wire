@@ -6,7 +6,6 @@ use crate::engine::{
     buffer::{self, Buffer},
     device::Device,
     pipeline::Pipeline,
-    vertex,
 };
 
 pub struct FramesInFlight {
@@ -32,7 +31,7 @@ impl FramesInFlight {
         let mut data = vec![];
 
         for _ in 0..frames_in_flight {
-            let frame = FrameData::new(device.clone(), &pool);
+            let frame = FrameData::new(device.clone(), pool);
             data.push(frame);
         }
 
@@ -62,9 +61,9 @@ pub struct FrameData {
 }
 
 impl FrameData {
-    pub fn new(device: Arc<Device>, pool: &vk::CommandPool) -> Self {
+    pub fn new(device: Arc<Device>, pool: vk::CommandPool) -> Self {
         let command_buffer_info = vk::CommandBufferAllocateInfo::default()
-            .command_pool(*pool)
+            .command_pool(pool)
             .level(vk::CommandBufferLevel::PRIMARY)
             .command_buffer_count(1);
 
@@ -114,8 +113,9 @@ impl FrameData {
         image_view: vk::ImageView,
         extent: vk::Extent2D,
         pipeline: &Pipeline,
-        buffer: &Buffer<buffer::Vertex>,
-        vertices: &[vertex::Vertex],
+        vertex_buffer: &Buffer<buffer::Vertex>,
+        index_buffer: &Buffer<buffer::Index>,
+        indices: &[u16],
     ) {
         let begin_command_info = vk::CommandBufferBeginInfo::default();
 
@@ -172,7 +172,8 @@ impl FrameData {
             );
         }
 
-        buffer.bind(self.buffer, 0);
+        vertex_buffer.bind(self.buffer, 0);
+        index_buffer.bind(self.buffer, vk::IndexType::UINT16);
 
         let viewports = [vk::Viewport::default()
             .width(extent.width as f32)
@@ -196,7 +197,7 @@ impl FrameData {
         unsafe {
             self.device
                 .logical
-                .cmd_draw(self.buffer, vertices.len() as u32, 1, 0, 0);
+                .cmd_draw_indexed(self.buffer, indices.len() as u32, 1, 0, 0, 0);
         }
 
         unsafe {
